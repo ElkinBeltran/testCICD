@@ -1,27 +1,55 @@
-# azure-pipelines.yml
 trigger:
-  branches:
-    include:
-      - master  # o la rama que prefieras
+- main # O el nombre de tu rama principal
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'windows-latest' # O 'ubuntu-latest' si prefieres Linux
+
+variables:
+  buildConfiguration: 'Release'
+  dotNetSdkVersion: '5.x' # Especifica la versión de .NET 5
 
 steps:
+# 1. Instalar el SDK de .NET (si no está disponible)
 - task: UseDotNet@2
+  displayName: 'Use .NET SDK $(dotNetSdkVersion)'
   inputs:
-    packageType: 'sdk'
-    version: '7.0.x'  # ajusta la versión según tu SDK
-    installationPath: $(Agent.ToolsDirectory)/dotnet
+    version: '$(dotNetSdkVersion)'
 
-- script: |
-    dotnet restore
-  displayName: 'Restore dependencies'
+# 2. Restaurar dependencias
+- task: DotNetCoreCLI@2
+  displayName: 'Restore packages'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
 
-- script: |
-    dotnet build --configuration Release --no-restore
+# 3. Compilar la aplicación
+- task: DotNetCoreCLI@2
   displayName: 'Build project'
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(buildConfiguration)'
 
-- script: |
-    dotnet test --no-build --verbosity normal
+# 4. Ejecutar pruebas unitarias (si existen)
+- task: DotNetCoreCLI@2
   displayName: 'Run tests'
+  inputs:
+    command: 'test'
+    projects: '**/*Tests.csproj' # Ajusta este patrón si tus proyectos de prueba tienen otro nombre
+    arguments: '--configuration $(buildConfiguration) --collect "Code Coverage"'
+
+# 5. Publicar la aplicación (generar los archivos de despliegue)
+- task: DotNetCoreCLI@2
+  displayName: 'Publish API'
+  inputs:
+    command: 'publish'
+    publishWebProjects: true # Publicar solo los proyectos web (tu API)
+    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+    zipAfterPublish: true # Comprimir la salida en un ZIP
+
+# 6. Publicar el artefacto (para que el CD lo use)
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
