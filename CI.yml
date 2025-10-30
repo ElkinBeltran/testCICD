@@ -2,7 +2,7 @@
 trigger:
   branches:
     include:
-      - main  # o la rama que prefieras
+      - master  # o la rama que prefieras
 
 pool:
   vmImage: 'windows-latest'
