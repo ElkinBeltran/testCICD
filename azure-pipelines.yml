@@ -1,5 +1,5 @@
 trigger:
-- main # O el nombre de tu rama principal
+- master # O el nombre de tu rama principal
 
 pool:
   vmImage: 'windows-latest' # O 'ubuntu-latest' si prefieres Linux
