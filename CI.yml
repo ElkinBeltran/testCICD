@@ -1,0 +1,27 @@
+# azure-pipelines.yml
+trigger:
+  branches:
+    include:
+      - main  # o la rama que prefieras
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+- task: UseDotNet@2
+  inputs:
+    packageType: 'sdk'
+    version: '7.0.x'  # ajusta la versión según tu SDK
+    installationPath: $(Agent.ToolsDirectory)/dotnet
+
+- script: |
+    dotnet restore
+  displayName: 'Restore dependencies'
+
+- script: |
+    dotnet build --configuration Release --no-restore
+  displayName: 'Build project'
+
+- script: |
+    dotnet test --no-build --verbosity normal
+  displayName: 'Run tests'
