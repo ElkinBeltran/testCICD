@@ -1,55 +1,77 @@
 trigger:
-- master # O el nombre de tu rama principal
+- master # O el nombre de tu rama principal (ej: main)
 
 pool:
-  vmImage: 'windows-latest' # O 'ubuntu-latest' si prefieres Linux
+  vmImage: 'windows-latest'
 
 variables:
   buildConfiguration: 'Release'
-  dotNetSdkVersion: '5.x' # Especifica la versión de .NET 5
+  dotNetSdkVersion: '5.x'
 
-steps:
-# 1. Instalar el SDK de .NET (si no está disponible)
-- task: UseDotNet@2
-  displayName: 'Use .NET SDK $(dotNetSdkVersion)'
-  inputs:
-    version: '$(dotNetSdkVersion)'
+# --- COMIENZA LA DEFINICIÓN DE ETAPAS (STAGES) ---
+stages:
 
-# 2. Restaurar dependencias
-- task: DotNetCoreCLI@2
-  displayName: 'Restore packages'
-  inputs:
-    command: 'restore'
-    projects: '**/*.csproj'
+# ETAPA 1: INTEGRACIÓN CONTINUA (CI)
+- stage: Build # <--- Etapa 'Build' definida correctamente
+  displayName: 'Build and Test API'
+  jobs:
+  - job: CompileAndPublish
+    displayName: 'Compile, Test, and Publish'
+    steps:
+    # 1. Instalar el SDK de .NET
+    - task: UseDotNet@2
+      displayName: 'Use .NET SDK $(dotNetSdkVersion)'
+      inputs:
+        version: '$(dotNetSdkVersion)'
 
-# 3. Compilar la aplicación
-- task: DotNetCoreCLI@2
-  displayName: 'Build project'
-  inputs:
-    command: 'build'
-    projects: '**/*.csproj'
-    arguments: '--configuration $(buildConfiguration)'
+    # 2. Restaurar dependencias, 3. Compilar, 4. Ejecutar pruebas
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore, Build, and Test'
+      inputs:
+        command: 'custom'
+        custom: 'restore' # Se pueden encadenar
+        arguments: '&& dotnet build --configuration $(buildConfiguration) && dotnet test --configuration $(buildConfiguration) --collect "Code Coverage"'
+        projects: '**/*.csproj'
 
-# 4. Ejecutar pruebas unitarias (si existen)
-- task: DotNetCoreCLI@2
-  displayName: 'Run tests'
-  inputs:
-    command: 'test'
-    projects: '**/*Tests.csproj' # Ajusta este patrón si tus proyectos de prueba tienen otro nombre
-    arguments: '--configuration $(buildConfiguration) --collect "Code Coverage"'
+    # 5. Publicar la aplicación
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API'
+      inputs:
+        command: 'publish'
+        publishWebProjects: true
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+        zipAfterPublish: true
 
-# 5. Publicar la aplicación (generar los archivos de despliegue)
-- task: DotNetCoreCLI@2
-  displayName: 'Publish API'
-  inputs:
-    command: 'publish'
-    publishWebProjects: true # Publicar solo los proyectos web (tu API)
-    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
-    zipAfterPublish: true # Comprimir la salida en un ZIP
+    # 6. Publicar el artefacto
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
 
-# 6. Publicar el artefacto (para que el CD lo use)
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Artifact: drop'
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'drop'
+# --- ETAPA 2: DESPLIEGUE CONTINUO (CD) ---
+- stage: Deploy
+  displayName: 'Deploy to Azure'
+  # Ahora esta dependencia funciona, ya que la etapa 'Build' existe
+  dependsOn: Build 
+  condition: succeeded()
+
+  jobs:
+  - deployment: DeployApi
+    displayName: 'Deploy API'
+    environment: 'Production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          # 1. Descargar el artefacto (ya que no viene del CI, debe descargarse de la misma corrida)
+          - download: current
+            artifact: drop
+
+          # 2. Desplegar en Azure App Service
+          - task: AzureRmWebAppDeployment@4
+            displayName: 'Deploy Azure App Service'
+            inputs:
+              azureSubscription: 'AzureConn'
+              appName: 'testingEDB'
+              package: '$(Pipeline.Workspace)/drop/**/*.zip'
