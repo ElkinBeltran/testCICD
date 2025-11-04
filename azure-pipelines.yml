@@ -12,30 +12,45 @@ variables:
 stages:
 
 # ETAPA 1: INTEGRACIÓN CONTINUA (CI)
-- stage: Build # <--- Etapa 'Build' definida correctamente
+- stage: Build
   displayName: 'Build and Test API'
   jobs:
   - job: CompileAndPublish
     displayName: 'Compile, Test, and Publish'
     steps:
+    
     # 1. Instalar el SDK de .NET
     - task: UseDotNet@2
-      displayName: 'Use .NET SDK $(dotNetSdkVersion)'
+      displayName: '1. Use .NET SDK $(dotNetSdkVersion)'
       inputs:
         version: '$(dotNetSdkVersion)'
 
-    # 2. Restaurar dependencias, 3. Compilar, 4. Ejecutar pruebas
+    # 2. Restaurar dependencias (TAREA SEPARADA - Corregido)
     - task: DotNetCoreCLI@2
-      displayName: 'Restore, Build, and Test'
+      displayName: '2. Restore packages'
       inputs:
-        command: 'custom'
-        custom: 'restore' # Se pueden encadenar
-        arguments: '&& dotnet build --configuration $(buildConfiguration) && dotnet test --configuration $(buildConfiguration) --collect "Code Coverage"'
+        command: 'restore'
         projects: '**/*.csproj'
+
+    # 3. Compilar la aplicación (TAREA SEPARADA - Corregido)
+    - task: DotNetCoreCLI@2
+      displayName: '3. Build project'
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+        arguments: '--configuration $(buildConfiguration)'
+
+    # 4. Ejecutar pruebas unitarias (TAREA SEPARADA - Corregido)
+    - task: DotNetCoreCLI@2
+      displayName: '4. Run tests'
+      inputs:
+        command: 'test'
+        projects: '**/*Tests.csproj'
+        arguments: '--configuration $(buildConfiguration) --collect "Code Coverage"'
 
     # 5. Publicar la aplicación
     - task: DotNetCoreCLI@2
-      displayName: 'Publish API'
+      displayName: '5. Publish API'
       inputs:
         command: 'publish'
         publishWebProjects: true
@@ -44,7 +59,7 @@ stages:
 
     # 6. Publicar el artefacto
     - task: PublishBuildArtifacts@1
-      displayName: 'Publish Artifact: drop'
+      displayName: '6. Publish Artifact: drop'
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)'
         ArtifactName: 'drop'
@@ -52,8 +67,7 @@ stages:
 # --- ETAPA 2: DESPLIEGUE CONTINUO (CD) ---
 - stage: Deploy
   displayName: 'Deploy to Azure'
-  # Ahora esta dependencia funciona, ya que la etapa 'Build' existe
-  dependsOn: Build 
+  dependsOn: Build
   condition: succeeded()
 
   jobs:
@@ -64,7 +78,8 @@ stages:
       runOnce:
         deploy:
           steps:
-          # 1. Descargar el artefacto (ya que no viene del CI, debe descargarse de la misma corrida)
+          
+          # 1. Descargar el artefacto
           - download: current
             artifact: drop
 
@@ -72,6 +87,7 @@ stages:
           - task: AzureRmWebAppDeployment@4
             displayName: 'Deploy Azure App Service'
             inputs:
-              azureSubscription: 'AzureConn'
+              # Valores de ejemplo insertados por ti
+              azureSubscription: 'AzureConn' 
               appName: 'testingEDB'
               package: '$(Pipeline.Workspace)/drop/**/*.zip'
