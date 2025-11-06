@@ -89,5 +89,5 @@ stages:
             inputs:
               # Valores de ejemplo insertados por ti
               azureSubscription: 'AzureConn' 
-              appName: 'testingEDB'
+              WebAppName: 'testingEDB'
               package: '$(Pipeline.Workspace)/drop/**/*.zip'
